@@ -1,9 +1,5 @@
 (function(){
 
-    var counterList = [];
-
-    var randomize;
-
     var currentSelectedId;
 
     function log(describer, text){
@@ -29,32 +25,87 @@
     }
 
     function editGravity(id, gravityProps){
-        var gravityPropsObj = {};
-        if (gravityProps[0]) gravityPropsObj.x = gravityPropsObj[0];
-        if (gravityProps[1]) gravityPropsObj.y = gravityPropsObj[1];
-        if (gravityProps[2]) gravityPropsObj.z = gravityPropsObj[2];
-
-        var props = {gravity: gravityPropsObj};
+        log("in gravity Props", gravityProps)
+        var gravityPropsObj = {
+            x: gravityProps[0],
+            y: gravityProps[1],
+            z: gravityProps[2]
+        };
+        var props = {gravity: gravityPropsObj, dynamic: true};
+        log("id", id)
+        log("props", props)
 
         Entities.editEntity(id, props);
     }
 
-    function castRay(event) {
-        var pickRay = Camera.computePickRay(event.x, event.y);
-        // In this example every entity will be pickable except the entities in the blacklist array
-        // the third argument is the whitelist array,and the fourth and final is the blacklist array
-        var pickResults = Entities.findRayIntersection(pickRay, true, [], [blackListBox]);
+    var pointer = Pointers.createPointer(PickType.Ray, {
+        joint: "_CAMERA_RELATIVE_CONTROLLER_RIGHTHAND",
+        filter: Picks.PICK_ENTITIES,
+        distanceScaleEnd: true,
+        hover: false,
+        enabled: true
+    });
 
-        // With below example, only entities added to whitelist will be pickable
-        // var pickResults = Entities.findRayIntersection(pickRay, true, [whiteListBox], []);
+    function bounceCheck(){
+    var date = Date.now();
+    return function(timeToPass){
+        var dateTest = Date.now();
+        var timePassed = dateTest-date;
 
-        if (pickResults.intersects) {
-            print("INTERSECTION!");
+        if (timePassed > timeToPass){
+            date = Date.now();
+            return true;
         }
+        else {
+            return false;
+        }
+    };
+}
+var bounceCheckStart = bounceCheck();
 
-    }
+    var MAPPING_NAME = "Gravity Mapping";
 
-    // create a new controller mapping
-    // get gravity getProps
-    // edit gravity props
-});
+    var mapping = Controller.newMapping(MAPPING_NAME);
+
+    mapping.from(Controller.Standard.RTClick).to(function(value){ print(value);
+        if (value === 0) return;
+        var result = Pointers.getPrevPickResult(pointer);
+        // log("result.objectID", result.objectID);
+        // print("PRINT RESULT \n");
+        if (typeof result.objectID == "string") {
+            print(JSON.stringify(result));
+            // log("result.objectID", result.objectID);
+            currentSelectedId = result.objectID;
+        }
+    });
+
+    mapping.from(Controller.Standard.LY).to(function(value){ print(value);
+        print(value);
+        // log("currentSelectedId", currentSelectedId);
+        var gravityProps = getProps(currentSelectedId, ['gravity']).gravity;
+        // log("gravityProps", gravityProps);
+        var gravityPropsToPass;
+        if (value < -0.600) {
+            // CHANGE THIS 200 smaller for faster  updates, later for less updates
+            if(!bounceCheckStart(100)) return
+            // print("up");
+            // CHANGE THIS 0.5 later for bigger changes each update
+            gravityPropsToPass = gravityProps.y + 1;
+            editGravity(currentSelectedId, [gravityProps.x + 0.2, gravityPropsToPass, gravityProps.z + 0.2]);
+        }
+        if (value > 0.600) {
+            if(!bounceCheckStart(100)) return
+            // print("down");
+            gravityPropsToPass = gravityProps.y - 1;
+            editGravity(currentSelectedId, [gravityProps.x - 0.2, gravityPropsToPass, gravityProps.z - 0.2]);
+        }
+        var gravityProps = getProps(currentSelectedId, ['gravity']).gravity;
+        // log("gravityProps", gravityProps);
+    });
+
+    Controller.enableMapping(MAPPING_NAME);
+
+    Script.scriptEnding.connect(function(){
+        Controller.disableMapping(MAPPING_NAME);
+    })
+}());
